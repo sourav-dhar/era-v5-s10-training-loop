@@ -1,0 +1,704 @@
+{
+ "profile": "full",
+ "gpu": "Tesla T4",
+ "torch": "2.5.1+cu124",
+ "amp_dtype": "float16",
+ "n_params": 10795776,
+ "config": {
+  "n_layer": 6,
+  "n_head": 6,
+  "n_embd": 384,
+  "block_size": 256,
+  "vocab_size": 65
+ },
+ "shapes": {
+  "state_MiB": 164.73046875,
+  "act_MiB": 1192.5625,
+  "att_share": 0.2414967768984854
+ },
+ "gradcheck": {
+  "min_digits": 8.342188899037135,
+  "median_digits": 9.22681477722966,
+  "rows": [
+   {
+    "layer": "token embedding",
+    "weight": "wte.weight[39, 182]",
+    "backward": 0.10287227976026699,
+    "nudge": 0.10287227971694789,
+    "rel_error": 4.210959299182364e-10,
+    "agree_digits": 9.37561895621116
+   },
+   {
+    "layer": "position embedding",
+    "weight": "wpe.weight[0, 89]",
+    "backward": 0.12706414620513268,
+    "nudge": 0.12706414622698503,
+    "rel_error": 1.7197890915039578e-10,
+    "agree_digits": 9.76452481007635
+   },
+   {
+    "layer": "LayerNorm gain",
+    "weight": "h.0.ln_1.weight[89]",
+    "backward": -0.008214131501258774,
+    "nudge": -0.008214131463901708,
+    "rel_error": 4.547902033473118e-09,
+    "agree_digits": 8.342188899037135
+   },
+   {
+    "layer": "q/k/v projection",
+    "weight": "h.0.attn.c_attn.weight[1054, 47]",
+    "backward": -0.03900055285043315,
+    "nudge": -0.03900055283168058,
+    "rel_error": 4.808282850256604e-10,
+    "agree_digits": 9.318009992608374
+   },
+   {
+    "layer": "q/k/v bias",
+    "weight": "h.0.attn.c_attn.bias[985]",
+    "backward": 0.048876371879243735,
+    "nudge": 0.048876371927519806,
+    "rel_error": 9.877179654957268e-10,
+    "agree_digits": 9.005367046823984
+   },
+   {
+    "layer": "attention output",
+    "weight": "h.5.attn.c_proj.weight[58, 211]",
+    "backward": -0.07986135042857424,
+    "nudge": -0.07986135042159503,
+    "rel_error": 8.739157101695818e-11,
+    "agree_digits": 10.058530453376514
+   },
+   {
+    "layer": "MLP expand",
+    "weight": "h.0.mlp.c_fc.weight[485, 307]",
+    "backward": 0.027324131559580554,
+    "nudge": 0.027324131579575802,
+    "rel_error": 7.317798355000332e-10,
+    "agree_digits": 9.135619561850943
+   },
+   {
+    "layer": "MLP squeeze",
+    "weight": "h.5.mlp.c_proj.weight[209, 638]",
+    "backward": -0.06429498620745769,
+    "nudge": -0.06429498626836505,
+    "rel_error": 9.473112294113814e-10,
+    "agree_digits": 9.023507314544812
+   },
+   {
+    "layer": "final LayerNorm shift",
+    "weight": "ln_f.bias[209]",
+    "backward": -0.013932739994169226,
+    "nudge": -0.013932739939548354,
+    "rel_error": 3.920325225640242e-09,
+    "agree_digits": 8.406677902917792
+   },
+   {
+    "layer": "output head",
+    "weight": "lm_head.weight[1, 198]",
+    "backward": 0.2418810362290031,
+    "nudge": 0.2418810362225798,
+    "rel_error": 2.65555277744651e-11,
+    "agree_digits": 10.575845062828531
+   }
+  ]
+ },
+ "eps_sweep": {
+  "fp64": {
+   "best_h": 2.1544346900318823e-05,
+   "best_digits": 9.246783804020179
+  },
+  "fp32": {
+   "best_h": 0.021544346900318777,
+   "best_digits": 4.369961690837162
+  },
+  "bf16": {
+   "best_h": 0.21544346900318778,
+   "best_digits": 2.5405681322648226
+  }
+ },
+ "grad_failures": [
+  {
+   "case": "dropout 0.1, fresh mask per forward",
+   "backward": 0.020003223821258437,
+   "nudge": 1487.6901600399783,
+   "ratio": 1.3445826529309636e-05
+  },
+  {
+   "case": "dropout 0.1, mask re-seeded (repeatable)",
+   "backward": 0.020003223821258437,
+   "nudge": 0.02000322387729625,
+   "ratio": 0.9999999971985609
+  },
+  {
+   "case": "no zero_grad between two backward()",
+   "backward": 0.05464826311916111,
+   "nudge": 0.027324131559580554,
+   "ratio": 2.0
+  }
+ ],
+ "accum": {
+  "big_vs_correct_maxdiff": 3.026798367500305e-08,
+  "broken_cos": 0.7890359569709977,
+  "sweep": [
+   {
+    "short_len": 1,
+    "token_share": 0.0013003901170351106,
+    "vote": 0.25,
+    "loss_err_pct": 20.222672435150855,
+    "grad_cos": 0.19253729725543922,
+    "grad_norm_ratio": 5.405858039855957
+   },
+   {
+    "short_len": 2,
+    "token_share": 0.0025974025974025974,
+    "vote": 0.25,
+    "loss_err_pct": 12.691392084119046,
+    "grad_cos": 0.23917852894301897,
+    "grad_norm_ratio": 3.9110918045043945
+   },
+   {
+    "short_len": 4,
+    "token_share": 0.0051813471502590676,
+    "vote": 0.25,
+    "loss_err_pct": 5.546934219204558,
+    "grad_cos": 0.37707869309158654,
+    "grad_norm_ratio": 2.3212881088256836
+   },
+   {
+    "short_len": 8,
+    "token_share": 0.010309278350515464,
+    "vote": 0.25,
+    "loss_err_pct": -0.7185537802819608,
+    "grad_cos": 0.4399256587252921,
+    "grad_norm_ratio": 1.9170331954956055
+   },
+   {
+    "short_len": 16,
+    "token_share": 0.02040816326530612,
+    "vote": 0.25,
+    "loss_err_pct": -0.10904654970954608,
+    "grad_cos": 0.6283632830446251,
+    "grad_norm_ratio": 1.3622610569000244
+   },
+   {
+    "short_len": 32,
+    "token_share": 0.04,
+    "vote": 0.25,
+    "loss_err_pct": -0.3712581887394095,
+    "grad_cos": 0.7831361453393627,
+    "grad_norm_ratio": 1.171525239944458
+   },
+   {
+    "short_len": 64,
+    "token_share": 0.07692307692307693,
+    "vote": 0.25,
+    "loss_err_pct": -1.3874891840364834,
+    "grad_cos": 0.8946565848060166,
+    "grad_norm_ratio": 1.0271512269973755
+   },
+   {
+    "short_len": 128,
+    "token_share": 0.14285714285714285,
+    "vote": 0.25,
+    "loss_err_pct": -0.8609772820997286,
+    "grad_cos": 0.9661476489656419,
+    "grad_norm_ratio": 0.9981066584587097
+   },
+   {
+    "short_len": 256,
+    "token_share": 0.25,
+    "vote": 0.25,
+    "loss_err_pct": 0.0,
+    "grad_cos": 0.9999999999999849,
+    "grad_norm_ratio": 1.0
+   }
+  ],
+  "final_val": {
+   "big": 1.8773009777069092,
+   "correct": 1.8772965669631958,
+   "broken": 2.1051290035247803
+  },
+  "report_gap": -0.033449943190239986,
+  "per_pos_delta_early": 0.07430120557546616,
+  "per_pos_delta_late": 0.346356981433928
+ },
+ "norm": {
+  "events": [],
+  "n_spikes": 31,
+  "sta_peak_k": 0,
+  "sta_peak": 0.0048800380900502205,
+  "sta_peak_sem": 0.0014988175326108011,
+  "sta": {
+   "k": [
+    -5,
+    -4,
+    -3,
+    -2,
+    -1,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "excess": [
+    0.00011250835086684674,
+    -0.0006212440202943981,
+    -0.0006089099915698171,
+    0.0011176408734172583,
+    0.0004318805877119303,
+    0.0048800380900502205,
+    0.000907623500097543,
+    0.003273541573435068,
+    -0.0002793429885059595,
+    0.0014467235887423158,
+    0.0005153909442014992,
+    0.0024249530397355556,
+    0.0022055101580917835,
+    0.0019844667986035347,
+    0.0008831476443447173,
+    0.0018918224377557635,
+    0.003220365382730961,
+    0.0046949624083936214,
+    0.005551557522267103,
+    0.005915733519941568,
+    0.004650174640119076
+   ],
+   "sem": [
+    0.0011337031419935174,
+    0.0005492468555987936,
+    0.0008074346422399262,
+    0.0008639631965416747,
+    0.0014073894996982908,
+    0.0014988175326108011,
+    0.0017999697855021696,
+    0.001955776543251854,
+    0.0019531122591690884,
+    0.0021575843535882565,
+    0.0020964366251939944,
+    0.0020691807380853696,
+    0.0021902201608974075,
+    0.002531289002945649,
+    0.002623988793259042,
+    0.0026046374395893397,
+    0.0025069561673404343,
+    0.002364952568964795,
+    0.0021872986148282476,
+    0.002209937335090026,
+    0.002523668996580106
+   ]
+  },
+  "final_val": 1.9242559671401978,
+  "clipped_frac": 0.042,
+  "median_tok_s": 157045.2608978977,
+  "best_step": 1145,
+  "best_probe": 1.59085214138031,
+  "final_probe": 2.044581651687622,
+  "final_train": 0.6880660057067871,
+  "quantiles": {
+   "p50": 0.6629163026809692,
+   "p90": 0.9189749956130981,
+   "p99": 1.0657953023910522
+  }
+ },
+ "inject": {
+  "poisoned, no clip": {
+   "norm_at_poison": 8.311492919921875,
+   "peak_excess": 1.051454782485962,
+   "end_excess": -0.023292124271392822,
+   "react_step": 41
+  },
+  "poisoned, clip 1.0": {
+   "norm_at_poison": 8.275983810424805,
+   "peak_excess": 0.024829983711242676,
+   "end_excess": -0.0017786502838134765,
+   "react_step": 43
+  },
+  "poison_step": 40
+ },
+ "mfu": {
+  "gpu": "Tesla T4",
+  "tag": "T4",
+  "amp": "float16",
+  "peak16": 65.0,
+  "peak32": 8.1,
+  "ladder": [
+   {
+    "rung": "fp32 \u00b7 naive attention \u00b7 eager",
+    "B": 32,
+    "step_ms": 191.86158508000062,
+    "tok_s": 42697.447728184765,
+    "tflops_6N": 2.734134139490548,
+    "tflops_attn": 3.036341892396494,
+    "mem_GiB": 2.1998677253723145,
+    "n_mm": 10672512,
+    "MFU": 0.04206360214600843,
+    "MFU_attn": 0.04671295219071529,
+    "MFU_vs_fp32_peak": 0.33754742462846277
+   },
+   {
+    "rung": "+ float16 autocast",
+    "B": 32,
+    "step_ms": 75.86358920000066,
+    "tok_s": 107983.29061920957,
+    "tflops_6N": 6.91471778959801,
+    "tflops_attn": 7.679011426472226,
+    "mem_GiB": 1.8520598411560059,
+    "n_mm": 10672512,
+    "MFU": 0.10638027368612323,
+    "MFU_attn": 0.11813863733034193,
+    "MFU_vs_fp32_peak": NaN
+   },
+   {
+    "rung": "+ fused attention (SDPA)",
+    "B": 32,
+    "step_ms": 52.13126384000134,
+    "tok_s": 157141.78779824858,
+    "tflops_6N": 10.06258569586957,
+    "tflops_attn": 11.17481767002534,
+    "mem_GiB": 1.4315886497497559,
+    "n_mm": 10672512,
+    "MFU": 0.1548090107056857,
+    "MFU_attn": 0.17192027184654368,
+    "MFU_vs_fp32_peak": NaN
+   },
+   {
+    "rung": "+ fused AdamW",
+    "B": 32,
+    "step_ms": 51.127194240000335,
+    "tok_s": 160227.84198845853,
+    "tflops_6N": 10.260201398135564,
+    "tflops_attn": 11.394276118211572,
+    "mem_GiB": 1.4316253662109375,
+    "n_mm": 10672512,
+    "MFU": 0.15784925227900867,
+    "MFU_attn": 0.1752965556647934,
+    "MFU_vs_fp32_peak": NaN
+   },
+   {
+    "rung": "+ torch.compile",
+    "B": 32,
+    "step_ms": 43.98002464000001,
+    "tok_s": 186266.38040919474,
+    "tflops_6N": 11.927581080682174,
+    "tflops_attn": 13.245953659383849,
+    "mem_GiB": 1.5783724784851074,
+    "n_mm": 10672512,
+    "MFU": 0.18350124739511037,
+    "MFU_attn": 0.2037839024520592,
+    "MFU_vs_fp32_peak": NaN
+   },
+   {
+    "rung": "+ 2x micro-batch",
+    "B": 64,
+    "step_ms": 81.44411596000054,
+    "tok_s": 201168.6149070196,
+    "tflops_6N": 12.881846739711273,
+    "tflops_attn": 14.30569566513829,
+    "mem_GiB": 2.2597079277038574,
+    "n_mm": 10672512,
+    "MFU": 0.19818225753401958,
+    "MFU_attn": 0.22008762561751213,
+    "MFU_vs_fp32_peak": NaN
+   }
+  ],
+  "gemm": [
+   {
+    "matmul": "square 4096\u00b3 (ideal)",
+    "TFLOPs": 24.786761168862608,
+    "of_peak": 0.3813347872132709
+   },
+   {
+    "matmul": "square 8192\u00b3 (ideal)",
+    "TFLOPs": 24.135580024651833,
+    "of_peak": 0.37131661576387437
+   },
+   {
+    "matmul": "qkv: (8192\u00d7384) @ (384\u00d71152)",
+    "TFLOPs": 17.73486244550251,
+    "of_peak": 0.27284403762311554
+   },
+   {
+    "matmul": "attn proj: (8192\u00d7384) @ (384\u00d7384)",
+    "TFLOPs": 17.359170123312182,
+    "of_peak": 0.26706415574326436
+   },
+   {
+    "matmul": "mlp up: (8192\u00d7384) @ (384\u00d71536)",
+    "TFLOPs": 19.506166641874234,
+    "of_peak": 0.30009487141344976
+   },
+   {
+    "matmul": "mlp down: (8192\u00d71536) @ (1536\u00d7384)",
+    "TFLOPs": 25.052577217208906,
+    "of_peak": 0.38542426488013704
+   },
+   {
+    "matmul": "lm head: (8192\u00d7384) @ (384\u00d765)",
+    "TFLOPs": 2.3926770659818546,
+    "of_peak": 0.03681041639972084
+   }
+  ],
+  "width": [
+   {
+    "n_embd": 128,
+    "params_M": 1.198208,
+    "tok_s": 457428.5670598591,
+    "tflops_6N": 3.288567410877958,
+    "tflops_attn": 4.367776799428015,
+    "mem_GiB": 0.8398661613464355,
+    "MFU": 0.05059334478273781,
+    "MFU_attn": 0.06719656614504639
+   },
+   {
+    "n_embd": 256,
+    "params_M": 4.755712,
+    "tok_s": 279009.59348367626,
+    "tflops_6N": 7.961335631072646,
+    "tflops_attn": 9.277868066807972,
+    "mem_GiB": 1.1198616027832031,
+    "MFU": 0.12248208663188685,
+    "MFU_attn": 0.14273643179704573
+   },
+   {
+    "n_embd": 384,
+    "params_M": 10.672512,
+    "tok_s": 162673.9617183547,
+    "tflops_6N": 10.416838851160087,
+    "tflops_attn": 11.568226932718888,
+    "mem_GiB": 1.430954933166504,
+    "MFU": 0.16025905924861672,
+    "MFU_attn": 0.17797272204182904
+   },
+   {
+    "n_embd": 512,
+    "params_M": 18.948608,
+    "tok_s": 110464.83980808184,
+    "tflops_6N": 12.558929683836828,
+    "tflops_attn": 13.60140670263622,
+    "mem_GiB": 1.7710394859313965,
+    "MFU": 0.19321430282825888,
+    "MFU_attn": 0.20925241080978801
+   },
+   {
+    "n_embd": 768,
+    "params_M": 42.578688,
+    "tok_s": 59739.487449527696,
+    "tflops_6N": 15.261773984360133,
+    "tflops_attn": 16.10743278705046,
+    "mem_GiB": 2.53549861907959,
+    "MFU": 0.23479652283630972,
+    "MFU_attn": 0.24780665826231477
+   },
+   {
+    "n_embd": 1024,
+    "params_M": 75.645952,
+    "tok_s": 36828.823313096575,
+    "tflops_6N": 16.715708403353908,
+    "tflops_attn": 17.41082916757227,
+    "mem_GiB": 3.407989978790283,
+    "MFU": 0.2571647446669832,
+    "MFU_attn": 0.26785891027034264
+   }
+  ],
+  "buckets": {
+   "matmul": 19.322288799999967,
+   "layernorm \u00b7 gelu \u00b7 softmax": 6.717457999999979,
+   "elementwise \u00b7 reductions": 6.105568799999986,
+   "attention": 5.6520628000000075,
+   "dtype casts & copies": 5.632402800000031,
+   "optimizer": 4.294515000000003,
+   "other kernels": 1.6411395999999796,
+   "loss": 0.2905152000000071,
+   "GPU idle (launch overhead)": 1.0566465500003233
+  },
+  "idle_frac": 0.020835977667255534
+ },
+ "mfu_diagnosis": [
+  "**Headline:** best rung `+ 2x micro-batch` reaches **19.8% MFU** (12.9 TFLOP/s of 65); counting attention FLOPs, 22.0%. The fp32 starting point was 4.2% \u2014 a 4.7\u00d7 speed-up with the same maths.",
+  "**The ceiling is not the datasheet.** A large square float16 matmul \u2014 the best case \u2014 sustains 24.8 TFLOP/s = **38% of peak**. A T4 is a 70 W card that cannot hold its boost clock under sustained load, so 40% of the datasheet is **105% of what this card sustains even on a perfect matmul**: the target sits at or above what the hardware can actually deliver. Measured against that practical ceiling, the best rung is at **52%**.",
+  "**Our matmuls are too small to fill it.** At this model's shapes (C=384) the same matmuls run at 17.4\u201325.1 TFLOP/s (27%\u201339% of peak): too few columns per tile to keep the tensor cores fed.",
+  "**Most of a step is not matmul.** The profiler puts matmuls at **38%** of the step; LayerNorm, GELU, softmax, the loss, the optimizer and plain elementwise kernels are memory-bound \u2014 they move bytes, not FLOPs \u2014 and the GPU is busy 98% of the wall clock, so launch overhead is not the problem here: the kernels themselves are.",
+  "**Size fixes a lot of it.** With identical code, MFU goes from 5.1% at n_embd=128 to 25.7% at n_embd=1024. The distance to 40% is mostly the price of a 10M-parameter model, then the GPU class.",
+  "**The GPU generation.** Turing has no bf16 tensor cores (so we pay for fp16 + loss scaling), and FlashAttention-2 needs Ampere; SDPA falls back to the memory-efficient kernel.",
+  "**Not counted in 6N at all:** the optimizer step, clipping, the probe/eval passes, and recomputation. MFU is deliberately strict \u2014 \"useful model FLOPs\" only."
+ ],
+ "mfu_cross": {
+  "A100": [
+   {
+    "rung": "fp32 \u00b7 naive attention \u00b7 eager",
+    "MFU": 0.03361213298699649,
+    "tok_s": 163769.40267893978
+   },
+   {
+    "rung": "+ bfloat16 autocast",
+    "MFU": 0.09951499146098519,
+    "tok_s": 484869.8746809776
+   },
+   {
+    "rung": "+ fused attention (SDPA)",
+    "MFU": 0.14777817471169738,
+    "tok_s": 720024.0285518784
+   },
+   {
+    "rung": "+ fused AdamW",
+    "MFU": 0.15679915139579245,
+    "tok_s": 763977.2035469444
+   },
+   {
+    "rung": "+ torch.compile",
+    "MFU": 0.20839803281436398,
+    "tok_s": 1015383.9795492316
+   },
+   {
+    "rung": "+ 2x micro-batch",
+    "MFU": 0.26490083348059484,
+    "tok_s": 1290684.268238905
+   }
+  ],
+  "T4": [
+   {
+    "rung": "fp32 \u00b7 naive attention \u00b7 eager",
+    "MFU": 0.04206360214600843,
+    "tok_s": 42697.447728184765
+   },
+   {
+    "rung": "+ float16 autocast",
+    "MFU": 0.10638027368612323,
+    "tok_s": 107983.29061920957
+   },
+   {
+    "rung": "+ fused attention (SDPA)",
+    "MFU": 0.1548090107056857,
+    "tok_s": 157141.78779824858
+   },
+   {
+    "rung": "+ fused AdamW",
+    "MFU": 0.15784925227900867,
+    "tok_s": 160227.84198845853
+   },
+   {
+    "rung": "+ torch.compile",
+    "MFU": 0.18350124739511037,
+    "tok_s": 186266.38040919474
+   },
+   {
+    "rung": "+ 2x micro-batch",
+    "MFU": 0.19818225753401958,
+    "tok_s": 201168.6149070196
+   }
+  ]
+ },
+ "float": [
+  {
+   "format": "fp32",
+   "layout": "1\u00b78\u00b723",
+   "sign": 0,
+   "exponent": "01111011",
+   "mantissa": "10011001100110011001101",
+   "hex": "0x3DCCCCCD",
+   "value": "0.10000000149",
+   "exact": "13421773/134217728",
+   "rel_error": 1.4901161193847656e-08,
+   "ulp_at_0_1": 7.450580596923828e-09
+  },
+  {
+   "format": "fp16",
+   "layout": "1\u00b75\u00b710",
+   "sign": 0,
+   "exponent": "01011",
+   "mantissa": "1001100110",
+   "hex": "0x2E66",
+   "value": "0.0999755859375",
+   "exact": "819/8192",
+   "rel_error": -0.000244140625,
+   "ulp_at_0_1": 6.103515625e-05
+  },
+  {
+   "format": "bf16",
+   "layout": "1\u00b78\u00b77",
+   "sign": 0,
+   "exponent": "01111011",
+   "mantissa": "1001101",
+   "hex": "0x3DCD",
+   "value": "0.10009765625",
+   "exact": "205/2048",
+   "rel_error": 0.0009765625,
+   "ulp_at_0_1": 0.00048828125
+  },
+  {
+   "format": "fp8 E4M3",
+   "layout": "1\u00b74\u00b73",
+   "sign": 0,
+   "exponent": "0011",
+   "mantissa": "101",
+   "hex": "0x1D",
+   "value": "0.1015625",
+   "exact": "13/128",
+   "rel_error": 0.015625,
+   "ulp_at_0_1": 0.0078125
+  },
+  {
+   "format": "fp8 E5M2",
+   "layout": "1\u00b75\u00b72",
+   "sign": 0,
+   "exponent": "01011",
+   "mantissa": "10",
+   "hex": "0x2E",
+   "value": "0.09375",
+   "exact": "3/32",
+   "rel_error": -0.0625,
+   "ulp_at_0_1": 0.015625
+  }
+ ],
+ "swamping": {
+  "fp32": 2.000046730041504,
+  "bf16 (round-to-nearest)": 1.0,
+  "bf16 + stochastic rounding": 1.890625,
+  "fp8 E4M3 (round-to-nearest)": 1.0,
+  "sum_fp32": 200.0030059814453,
+  "sum_fp16": 230.125,
+  "sum_bf16": 32.0,
+  "sum_fp8 E4M3": 2.0,
+  "sr_mean_20": 1.99921875,
+  "sr_std_20": 0.07236163385860976
+ },
+ "underflow": [
+  {
+   "loss_scale": "1",
+   "fp16_zeroed": 0.00026802485808730125,
+   "fp16_subnormal": 0.1346927285194397,
+   "fp16_overflow": 0.0,
+   "bf16_zeroed": 0.0
+  },
+  {
+   "loss_scale": "1,024",
+   "fp16_zeroed": 3.548341555870138e-05,
+   "fp16_subnormal": 0.000298227445455268,
+   "fp16_overflow": 0.0,
+   "bf16_zeroed": 0.0
+  },
+  {
+   "loss_scale": "65,536",
+   "fp16_zeroed": 0.0,
+   "fp16_subnormal": 0.00020511822367552668,
+   "fp16_overflow": 0.0,
+   "bf16_zeroed": 0.0
+  }
+ ],
+ "loss_scale": {
+  "final": 131072.0,
+  "backoffs": 0
+ }
+}

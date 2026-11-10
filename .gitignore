@@ -5,3 +5,4 @@ data/
 *.pt
 .venv/
 .DS_Store
+runs/

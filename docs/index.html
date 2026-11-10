@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training Loop, Interrogated</title>
+<meta name="description" content="ERA V5 Session 10 — an interactive companion to a training loop made to tell the truth about itself.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f5f2; --surface:#fcfcfb; --surface-2:#f1f0ec; --line:#e4e2dc; --ink:#0b0b0b; --ink-2:#52514e; --muted:#8a8984;
+  --blue:#2a78d6; --orange:#eb6834; --aqua:#1baf7a; --yellow:#eda100; --violet:#6250d6; --red:#e34948; --green:#008300;
+  --blue-soft:#cde2fb; --shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;--bg:#121211;--surface:#1a1a19;--surface-2:#222220;--line:#2f2f2c;--ink:#f0efec;--ink-2:#c3c2b7;--muted:#8f8e86;
+  --blue:#3987e5;--orange:#d95926;--aqua:#199e70;--yellow:#c98500;--violet:#9085e9;--red:#e66767;--green:#2ea043;--blue-soft:#1c3a63;--shadow:none;}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#121211;--surface:#1a1a19;--surface-2:#222220;--line:#2f2f2c;--ink:#f0efec;--ink-2:#c3c2b7;--muted:#8f8e86;
+  --blue:#3987e5;--orange:#d95926;--aqua:#199e70;--yellow:#c98500;--violet:#9085e9;--red:#e66767;--green:#2ea043;--blue-soft:#1c3a63;--shadow:none;}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+header.hero{padding:64px 0 28px}
+.kicker{font:600 12px/1 'JetBrains Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--violet)}
+h1{font-size:clamp(34px,6vw,60px);line-height:1.02;letter-spacing:-.035em;margin:14px 0 14px;font-weight:800}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--blue),var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{font-size:18px;color:var(--ink-2);max-width:720px;margin:0}
+.meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:500 12px 'JetBrains Mono',monospace;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 11px;text-decoration:none}
+a.chip:hover{border-color:var(--blue);color:var(--blue)}
+nav.toc{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav.toc .wrap{display:flex;gap:4px;overflow-x:auto;padding-top:8px;padding-bottom:8px;scrollbar-width:none}
+nav.toc a{flex:none;font:500 13px Inter;color:var(--ink-2);text-decoration:none;padding:6px 10px;border-radius:8px;white-space:nowrap}
+nav.toc a:hover{background:var(--surface-2);color:var(--ink)}
+.theme{margin-left:auto;flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:8px;padding:5px 10px;font:500 12px Inter;cursor:pointer}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:28px 0 8px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px;box-shadow:var(--shadow)}
+.tile .n{font:700 12px 'JetBrains Mono',monospace;color:var(--muted)}
+.tile .v{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.tile .l{font-size:12.5px;color:var(--ink-2);line-height:1.4}
+section{padding:56px 0 8px}
+.sec-head{display:flex;gap:14px;align-items:baseline;margin-bottom:6px}
+.sec-num{font:700 13px 'JetBrains Mono',monospace;color:var(--violet)}
+h2{font-size:clamp(24px,3.4vw,32px);letter-spacing:-.025em;margin:0;line-height:1.15}
+.sub{color:var(--ink-2);max-width:760px;margin:6px 0 22px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+.ctl{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-bottom:14px}
+.ctl label{font-size:13px;color:var(--ink-2);display:flex;gap:8px;align-items:center}
+input[type=text],input[type=number],select{font:500 14px 'JetBrains Mono',monospace;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:130px}
+input[type=range]{accent-color:var(--blue);width:160px}
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;color:var(--ink-2);font:600 12.5px Inter;padding:6px 10px;border-radius:7px;cursor:pointer}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.bits{display:flex;flex-wrap:wrap;gap:3px;margin:8px 0 14px}
+.bit{width:26px;height:36px;border-radius:6px;border:1.5px solid;display:grid;place-items:center;font:700 14px 'JetBrains Mono',monospace;cursor:pointer;user-select:none;transition:transform .08s}
+.bit:hover{transform:translateY(-2px)}
+.bit.s{border-color:var(--violet);color:var(--violet)} .bit.s.on{background:var(--violet);color:var(--surface)}
+.bit.e{border-color:var(--blue);color:var(--blue)} .bit.e.on{background:var(--blue);color:var(--surface)}
+.bit.m{border-color:var(--orange);color:var(--orange)} .bit.m.on{background:var(--orange);color:var(--surface)}
+.gap{width:8px}
+pre.calc{font:13px/1.65 'JetBrains Mono',monospace;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0;white-space:pre-wrap;color:var(--ink-2)}
+pre.calc b{color:var(--ink)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);margin-top:8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px}
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:12px/1.5 'JetBrains Mono',monospace;color:var(--ink-2);box-shadow:0 6px 20px rgba(0,0,0,.12);opacity:0;transition:opacity .1s;white-space:nowrap;z-index:3}
+.tip b{color:var(--ink)}
+.big{font-size:34px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.bad{color:var(--red)} .good{color:var(--green)}
+.note{font-size:13px;color:var(--ink-2);margin-top:10px}
+.fig{margin:0}
+.fig img{width:100%;border-radius:12px;border:1px solid var(--line);background:#fcfcfb;display:block}
+.fig figcaption{font-size:12.5px;color:var(--ink-2);margin-top:8px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t th,table.t td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+table.t th{color:var(--muted);font-weight:600;font-size:12px}
+table.t td.num{font-family:'JetBrains Mono',monospace;text-align:right}
+footer{padding:56px 0 64px;color:var(--muted);font-size:13px}
+.loading{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<header class="hero wrap">
+  <div class="kicker">ERA V5 · Session 10 · The Training Loop</div>
+  <h1>The training loop,<br><em>interrogated.</em></h1>
+  <p class="lede">A 10.7M-parameter GPT written from scratch, trained on Shakespeare, and made to tell the truth about itself — every number on this page comes from that run.</p>
+  <div class="meta">
+    <a class="chip" href="https://github.com/sourav-dhar/era-v5-s10-training-loop">GitHub repo ↗</a>
+    <a class="chip" href="https://github.com/sourav-dhar/era-v5-s10-training-loop/blob/main/training_loop.ipynb">notebook ↗</a>
+    <span class="chip" id="chip-gpu">GPU …</span><span class="chip" id="chip-params">params …</span>
+  </div>
+  <div class="tiles" id="tiles"><div class="loading">loading run data…</div></div>
+</header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#bits">0.1 in bits</a><a href="#swamp">Swamping lab</a><a href="#accum">Accumulation bug</a>
+  <a href="#norm">Grad norm</a><a href="#mfu">MFU</a><a href="#figs">All figures</a>
+  <button class="theme" id="theme">◐ theme</button>
+</div></nav>
+
+<main class="wrap">
+
+<section id="bits">
+  <div class="sec-head"><span class="sec-num">06</span><h2>Any number, bit by bit</h2></div>
+  <p class="sub">Type a value and pick a format. Exponent bits buy range, mantissa bits buy detail. Click any bit to flip it and see what the pattern means. Rounding is round-to-nearest-even, the same rule the hardware uses — the notebook checks 0.1 against it bit-for-bit.</p>
+  <div class="card">
+    <div class="ctl">
+      <label>value <input type="text" id="bx" value="0.1"></label>
+      <div class="seg" id="bfmt"></div>
+    </div>
+    <div class="bits" id="bbits"></div>
+    <div class="grid2">
+      <pre class="calc" id="bcalc"></pre>
+      <div>
+        <table class="t" id="btab"></table>
+        <div class="legend"><span><i style="background:var(--violet)"></i>sign</span><span><i style="background:var(--blue)"></i>exponent</span><span><i style="background:var(--orange)"></i>mantissa</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="swamp">
+  <div class="sec-head"><span class="sec-num">06b</span><h2>The update-swamping lab</h2></div>
+  <p class="sub">A weight sits at <b>w₀</b>. The optimizer adds the same small update a thousand times. If the update is less than half the gap between neighbouring numbers in the weight's format, every single add rounds back to where it started. This is why training keeps an <b>fp32 master copy</b> — and why fp8 recipes reach for stochastic rounding.</p>
+  <div class="card">
+    <div class="ctl">
+      <label>w₀ <input type="number" id="sw0" value="1" step="0.5"></label>
+      <label>update <input type="range" id="sdu" min="-5" max="-1" step="0.05" value="-3"><span id="sduv" style="font-family:JetBrains Mono">1e-3</span></label>
+      <label>steps <input type="number" id="sn" value="1000" min="10" max="5000" step="10"></label>
+    </div>
+    <div class="chart" id="swchart"></div>
+    <div class="legend" id="swleg"></div>
+  </div>
+</section>
+
+<section id="accum">
+  <div class="sec-head"><span class="sec-num">03</span><h2>The accumulation bug, as a calculator</h2></div>
+  <p class="sub">Three micro-batches with different numbers of real tokens. The correct loss weights every token equally; the pre-2024 bug averaged the three averages, giving a short micro-batch the same vote as a long one. Make the counts equal and the error vanishes — which is exactly how it hid.</p>
+  <div class="grid2">
+    <div class="card" id="acc-ctl"></div>
+    <div class="card">
+      <div class="note" style="margin-top:0">token-weighted (correct)</div><div class="big" id="acc-c">–</div>
+      <div class="note">average of averages (the bug)</div><div class="big" id="acc-b">–</div>
+      <div class="note">error</div><div class="big" id="acc-e">–</div>
+      <p class="note" id="acc-say"></p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="note" style="margin-top:0"><b>From the real run</b> — gradient direction and logged-loss error as one micro-batch gets shorter (the other three hold the full 256 tokens):</div>
+    <table class="t" id="acc-tab"></table>
+  </div>
+</section>
+
+<section id="norm">
+  <div class="sec-head"><span class="sec-num">04</span><h2>Grad norm and loss, every step</h2></div>
+  <p class="sub">The real 2,500-step run. Top: pre-clip gradient norm (log scale), with the clip at 1.0. Bottom: the probe loss — the current weights scored on one fixed validation batch before each update. Hover to read any step; drag across a panel to zoom, double-click to reset.</p>
+  <div class="card">
+    <div class="chart" id="normchart"><div class="loading">loading…</div></div>
+    <div class="legend"><span><i style="background:var(--violet)"></i>grad norm (pre-clip)</span><span><i style="background:var(--blue)"></i>probe loss</span><span><i style="background:var(--orange);opacity:.5"></i>training loss (this batch)</span><span><i style="background:var(--green)"></i>clip threshold</span></div>
+    <p class="note" id="norm-say"></p>
+  </div>
+</section>
+
+<section id="mfu">
+  <div class="sec-head"><span class="sec-num">05</span><h2>MFU: what the machine is really doing</h2></div>
+  <p class="sub">Model FLOPs Utilisation = 6 · N · tokens/s ÷ the GPU's dense tensor-core peak. Each rung adds one change to the one above. Healthy large-model training sits at 35–50%; a 10M-parameter model on a single GPU tells a different story, and the notebook explains why.</p>
+  <div class="card">
+    <div class="ctl"><div class="seg" id="mfu-gpu"></div></div>
+    <div class="chart" id="mfuchart"><div class="loading">loading…</div></div>
+    <ul class="note" id="mfu-diag" style="padding-left:18px"></ul>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="note" style="margin-top:0"><b>Your own MFU</b> — plug in any run.</div>
+    <div class="ctl" style="margin-top:10px">
+      <label>params (M) <input type="number" id="mN" value="10.7"></label>
+      <label>tokens / s <input type="number" id="mT" value="100000"></label>
+      <label>GPUs <input type="number" id="mG" value="1" min="1"></label>
+      <label>GPU <select id="mP"><option value="65">T4 (65)</option><option value="121">L4 (121)</option><option value="312">A100 (312)</option><option value="989" selected>H100 SXM (989)</option><option value="2250">B200 (2250)</option></select></label>
+    </div>
+    <pre class="calc" id="mcalc"></pre>
+  </div>
+</section>
+
+<section id="figs">
+  <div class="sec-head"><span class="sec-num">∗</span><h2>Every figure from the notebook</h2></div>
+  <p class="sub">Generated by <code>training_loop.ipynb</code> on Modal GPUs.</p>
+  <div class="gallery" id="gallery"></div>
+</section>
+</main>
+<footer class="wrap">Built for ERA V5 Session 10 · data: <code>docs/data/*.json</code>, produced by the notebook · palette validated for colour-vision deficiency.</footer>
+
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmtN=(v,d=2)=>v==null||isNaN(v)?'–':Number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+// theme toggle
+try{const t=localStorage.getItem('s10theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}
+$('theme').onclick=()=>{const cur=document.documentElement.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  const nx=cur==='dark'?'light':'dark';document.documentElement.dataset.theme=nx;try{localStorage.setItem('s10theme',nx);}catch(e){} redrawAll();};
+
+/* ───────── float formats ───────── */
+const FMTS=[['fp32',8,23,true],['fp16',5,10,true],['bf16',8,7,true],['fp8 E4M3',4,3,false],['fp8 E5M2',5,2,true]];
+const P2=n=>Math.pow(2,n);
+function rne(x){const f=Math.floor(x),d=x-f;return d>.5?f+1:d<.5?f:(f%2?f+1:f);}
+function enc(x,eb,mb,ieee){const bias=P2(eb-1)-1,emin=1-bias,top=P2(eb)-1;const s=(x<0||Object.is(x,-0))?1:0;let a=Math.abs(x);
+  if(isNaN(a))return{s,E:top,M:ieee?1:P2(mb)-1};
+  if(!isFinite(a))return ieee?{s,E:top,M:0}:{s,E:top,M:P2(mb)-2};
+  if(a===0)return{s,E:0,M:0};
+  let e=Math.floor(Math.log2(a));while(a<P2(e))e--;while(a>=P2(e+1))e++;
+  if(e<emin){const q=rne(a/P2(emin)*P2(mb));return q>=P2(mb)?{s,E:1,M:0}:{s,E:0,M:q};}
+  let M=rne((a/P2(e)-1)*P2(mb));if(M===P2(mb)){M=0;e++;}
+  const E=e+bias;
+  if(ieee&&E>=top)return{s,E:top,M:0};
+  if(!ieee&&(E>top||(E===top&&M===P2(mb)-1)))return{s,E:top,M:P2(mb)-2};
+  return{s,E,M};}
+function dec(b,eb,mb,ieee){const bias=P2(eb-1)-1,g=b.s?-1:1;
+  if(ieee&&b.E===P2(eb)-1)return b.M?NaN:g*Infinity;
+  if(!ieee&&b.E===P2(eb)-1&&b.M===P2(mb)-1)return NaN;
+  return b.E?g*(1+b.M/P2(mb))*P2(b.E-bias):g*b.M/P2(mb)*P2(1-bias);}
+const bin=(n,w)=>n.toString(2).padStart(w,'0');
+const fv=v=>isNaN(v)?'NaN':!isFinite(v)?(v>0?'+∞':'−∞'):(v!==0&&(Math.abs(v)<1e-4||Math.abs(v)>=1e7))?v.toExponential(6):String(+v.toPrecision(10));
+function quant(x,fi){const[,eb,mb,ie]=FMTS[fi];return dec(enc(x,eb,mb,ie),eb,mb,ie);}
+
+let bf=2,bval=0.1,bpat=null;
+$('bfmt').innerHTML=FMTS.map((f,i)=>`<button data-i="${i}" class="${i===bf?'on':''}">${f[0]}</button>`).join('');
+$('bfmt').onclick=e=>{const b=e.target.closest('button');if(!b)return;bf=+b.dataset.i;bpat=null;[...$('bfmt').children].forEach((c,i)=>c.className=i===bf?'on':'');renderBits();};
+$('bx').oninput=()=>{const v=parseFloat($('bx').value);if(!isNaN(v)||/nan/i.test($('bx').value)){bval=isNaN(v)?NaN:v;bpat=null;renderBits();}};
+function renderBits(){
+  const[name,eb,mb,ie]=FMTS[bf],bias=P2(eb-1)-1;const p=bpat||enc(bval,eb,mb,ie);const v=dec(p,eb,mb,ie);
+  const eb_=bin(p.E,eb),mb_=bin(p.M,mb);
+  let h=`<div class="bit s ${p.s?'on':''}" data-k="s" data-i="0">${p.s}</div><span class="gap"></span>`;
+  [...eb_].forEach((c,i)=>h+=`<div class="bit e ${c==='1'?'on':''}" data-k="e" data-i="${i}">${c}</div>`);h+='<span class="gap"></span>';
+  [...mb_].forEach((c,i)=>h+=`<div class="bit m ${c==='1'?'on':''}" data-k="m" data-i="${i}">${c}</div>`);
+  $('bbits').innerHTML=h;
+  const sub=p.E===0,ex=sub?1-bias:p.E-bias,frac=p.M/P2(mb);
+  const word=(BigInt(p.s)<<BigInt(eb+mb))|(BigInt(p.E)<<BigInt(mb))|BigInt(p.M);
+  const hex='0x'+word.toString(16).toUpperCase().padStart(Math.ceil((1+eb+mb)/4),'0');
+  const err=(isFinite(v)&&bval!==0&&isFinite(bval))?((v-bval)/bval*100):NaN;
+  $('bcalc').innerHTML=[`<b>${name}</b>  1 sign · ${eb} exponent · ${mb} mantissa · bias ${bias}`,
+    `bits      ${p.s} ${eb_} ${mb_}   (${hex})`,
+    `exponent  ${eb_}₂ = ${p.E}${sub?'  → subnormal, scale fixed at 2^'+(1-bias):'  → '+p.E+' − '+bias+' = '+ex}`,
+    `mantissa  ${p.M} / ${P2(mb)} = ${frac}`,
+    `value     ${sub?'0':'1'} + ${+frac.toPrecision(8)} × 2^${ex} = <b>${fv(v)}</b>`,
+    bpat?'(you flipped a bit by hand)':`you asked  ${fv(bval)}   rel. error ${isNaN(err)?'–':(err>=0?'+':'')+err.toPrecision(3)+'%'}`].join('\n');
+  $('btab').innerHTML='<tr><th>format</th><th>stores</th><th style="text-align:right">rel. error</th></tr>'+FMTS.map((f,i)=>{const q=quant(bval,i);const e=(isFinite(q)&&bval)?Math.abs((q-bval)/bval*100):NaN;
+    return `<tr style="${i===bf?'font-weight:700':''}"><td>${f[0]}</td><td class="num" style="text-align:left">${fv(q)}</td><td class="num ${e>1?'bad':''}">${isNaN(e)?(isFinite(q)?'0':'overflow'):e.toPrecision(3)+'%'}</td></tr>`;}).join('');
+}
+$('bbits').onclick=e=>{const t=e.target.closest('.bit');if(!t)return;const[,eb,mb,ie]=FMTS[bf];const p={...(bpat||enc(bval,eb,mb,ie))};const i=+t.dataset.i;
+  if(t.dataset.k==='s')p.s^=1;else if(t.dataset.k==='e')p.E^=P2(eb-1-i);else p.M^=P2(mb-1-i);bpat=p;renderBits();};
+renderBits();
+
+/* ───────── tiny SVG chart kit ───────── */
+function lineChart(el,{series,W=1000,H=300,ylog=false,xlab='',ylab='',hlines=[],ymin,ymax,onHover,xrange}){
+  const pad={l:56,r:16,t:12,b:34};const iw=W-pad.l-pad.r,ih=H-pad.t-pad.b;
+  const xs=series[0].x;const x0=xrange?xrange[0]:xs[0],x1=xrange?xrange[1]:xs[xs.length-1];
+  let lo=Infinity,hi=-Infinity;series.forEach(s=>s.y.forEach((v,i)=>{if(s.x[i]<x0||s.x[i]>x1||v==null||!isFinite(v))return;const w=ylog?Math.log10(Math.max(v,1e-12)):v;lo=Math.min(lo,w);hi=Math.max(hi,w);}));
+  if(ymin!=null)lo=ylog?Math.log10(ymin):ymin;if(ymax!=null)hi=ylog?Math.log10(ymax):ymax;if(hi-lo<1e-9){hi+=.5;lo-=.5;}const padv=(hi-lo)*.06;lo-=padv;hi+=padv;
+  const X=v=>pad.l+(v-x0)/(x1-x0)*iw,Y=v=>pad.t+ih-((ylog?Math.log10(Math.max(v,1e-12)):v)-lo)/(hi-lo)*ih;
+  const line=css('--line'),muted=css('--muted');let g='';
+  const ticks=[];if(ylog){for(let e=Math.floor(lo);e<=Math.ceil(hi);e++)if(e>=lo&&e<=hi)ticks.push(Math.pow(10,e));}
+  else{const st=niceStep((hi-lo)/4);for(let v=Math.ceil(lo/st)*st;v<=hi;v+=st)ticks.push(+v.toPrecision(6));}
+  ticks.forEach(t=>{g+=`<line x1="${pad.l}" x2="${W-pad.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="${line}"/><text x="${pad.l-8}" y="${Y(t)+4}" text-anchor="end" font-size="11" fill="${muted}" font-family="JetBrains Mono">${ylog?fmtTick(t):t}</text>`;});
+  const xst=niceStep((x1-x0)/6);for(let v=Math.ceil(x0/xst)*xst;v<=x1;v+=xst)g+=`<text x="${X(v)}" y="${H-12}" text-anchor="middle" font-size="11" fill="${muted}" font-family="JetBrains Mono">${+v.toPrecision(6)}</text>`;
+  hlines.forEach(h=>{g+=`<line x1="${pad.l}" x2="${W-pad.r}" y1="${Y(h.y)}" y2="${Y(h.y)}" stroke="${h.c}" stroke-width="1.3"/>`;});
+  series.forEach(s=>{let d='';s.x.forEach((xv,i)=>{if(xv<x0||xv>x1||s.y[i]==null||!isFinite(s.y[i]))return;d+=(d?'L':'M')+X(xv).toFixed(1)+','+Y(s.y[i]).toFixed(1);});
+    g+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="${s.w||2}" stroke-opacity="${s.o||1}" stroke-linejoin="round" stroke-linecap="round" ${s.dash?'stroke-dasharray="'+s.dash+'"':''}/>`;});
+  if(ylab)g+=`<text x="12" y="${pad.t+ih/2}" transform="rotate(-90 12 ${pad.t+ih/2})" text-anchor="middle" font-size="11.5" fill="${css('--ink-2')}">${ylab}</text>`;
+  g+=`<line id="cx" x1="0" x2="0" y1="${pad.t}" y2="${pad.t+ih}" stroke="${css('--ink-2')}" stroke-width="1" opacity="0"/><rect id="hit" x="${pad.l}" y="${pad.t}" width="${iw}" height="${ih}" fill="transparent"/><rect id="sel" y="${pad.t}" height="${ih}" fill="${css('--blue')}" opacity="0" x="0" width="0"/>`;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${ylab} chart">${g}</svg>`;
+  const svg=el.querySelector('svg'),cx=svg.querySelector('#cx'),hit=svg.querySelector('#hit');
+  const toX=ev=>{const r=svg.getBoundingClientRect();const px=(ev.clientX-r.left)/r.width*W;return x0+(px-pad.l)/iw*(x1-x0);};
+  return{svg,X,Y,W,H,pad,toX,cx,hit,x0,x1,sel:svg.querySelector('#sel')};
+}
+function niceStep(r){const p=Math.pow(10,Math.floor(Math.log10(r||1)));const n=r/p;return(n<1.5?1:n<3.5?2:n<7.5?5:10)*p;}
+function fmtTick(t){return t>=1&&t<1e4?String(t):'1e'+Math.round(Math.log10(t));}
+
+/* ───────── swamping lab ───────── */
+function swamp(){
+  const w0=parseFloat($('sw0').value)||1,du=Math.pow(10,+$('sdu').value),n=Math.min(5000,Math.max(10,+$('sn').value||1000));
+  $('sduv').textContent=du.toExponential(1);
+  const rows=[['fp32',0,css('--aqua')],['bf16 (nearest)',2,css('--red')],['bf16 + stochastic',2,css('--blue')],['fp8 E4M3 (nearest)',3,css('--orange')]];
+  let seed=7;const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+  const xs=[...Array(n+1).keys()];const ser=rows.map(([lab,fi,c])=>{let w=quant(w0,fi);const ys=[w];const[,eb,mb]=FMTS[fi];
+    for(let i=0;i<n;i++){const t=w+du;if(lab.includes('stochastic')){const e=Math.floor(Math.log2(Math.abs(t)));const ulp=P2(e-mb);const lo=Math.floor(t/ulp)*ulp;w=rand()<(t-lo)/ulp?lo+ulp:lo;}else w=quant(t,fi);ys.push(w);}
+    return{x:xs,y:ys,c,lab,w:lab.includes('stochastic')?1.5:2.2};});
+  ser.push({x:[0,n],y:[w0,w0+n*du],c:css('--muted'),w:1,dash:'4 4',lab:'exact'});
+  const c=lineChart($('swchart'),{series:ser,H:290,ylab:'weight'});
+  $('swleg').innerHTML=ser.map(s=>`<span><i style="background:${s.c}"></i>${s.lab}: <b>${fv(s.y[s.y.length-1])}</b></span>`).join('');
+}
+['sw0','sdu','sn'].forEach(id=>$(id).addEventListener('input',swamp));
+
+/* ───────── accumulation calculator ───────── */
+const acc={n:[4,4,2],L:[2,2,5]};
+function accDraw(){
+  let h='';for(let i=0;i<3;i++)h+=`<div class="ctl"><label style="width:110px">micro-batch ${i+1}</label><label>tokens <input type="range" min="1" max="16" value="${acc.n[i]}" data-i="${i}" data-k="n"><b style="font-family:JetBrains Mono;width:22px">${acc.n[i]}</b></label><label>mean loss <input type="range" min="5" max="60" value="${acc.L[i]*10}" data-i="${i}" data-k="L"><b style="font-family:JetBrains Mono">${acc.L[i].toFixed(1)}</b></label></div>`;
+  h+='<div class="seg"><button id="acc-eq">make counts equal</button><button id="acc-rs">lesson example</button></div>';
+  $('acc-ctl').innerHTML=h;
+  $('acc-ctl').querySelectorAll('input').forEach(inp=>inp.oninput=()=>{const i=+inp.dataset.i;if(inp.dataset.k==='n')acc.n[i]=+inp.value;else acc.L[i]=inp.value/10;accDraw();});
+  $('acc-eq').onclick=()=>{const m=Math.max(...acc.n);acc.n=[m,m,m];accDraw();};$('acc-rs').onclick=()=>{acc.n=[4,4,2];acc.L=[2,2,5];accDraw();};
+  const N=acc.n.reduce((a,b)=>a+b),c=acc.n.reduce((s,n,i)=>s+n*acc.L[i],0)/N,b=acc.L.reduce((a,b)=>a+b)/3,e=(b-c)/c*100;
+  $('acc-c').textContent=c.toFixed(4);$('acc-b').textContent=b.toFixed(4);$('acc-e').textContent=(e>=0?'+':'')+e.toFixed(1)+'%';$('acc-e').className='big '+(Math.abs(e)<.05?'good':'bad');
+  const sh=acc.n.map(n=>n/N);const worst=sh.reduce((m,s,i)=>Math.abs(1/3/s-1)>Math.abs(1/3/sh[m]-1)?i:m,0);
+  $('acc-say').innerHTML=Math.abs(e)<.05?'Equal (or proportionate) counts: the bug is invisible.':`Micro-batch ${worst+1} holds ${(sh[worst]*100).toFixed(1)}% of the tokens but gets 33.3% of the vote — ${(1/3/sh[worst]).toFixed(2)}× its fair weight.`;
+}
+accDraw();
+
+/* ───────── data-driven sections ───────── */
+let D={};
+async function getJSON(p){try{const r=await fetch(p);return r.ok?await r.json():null;}catch(e){return null;}}
+function tiles(){const s=D.summary;if(!s){$('tiles').innerHTML='<div class="loading">run data not found — open via GitHub Pages or a local server.</div>';return;}
+  $('chip-gpu').textContent=s.gpu+' · '+s.amp_dtype;$('chip-params').textContent=(s.n_params/1e6).toFixed(2)+'M params';
+  const bestM=s.mfu&&s.mfu.ladder&&s.mfu.ladder.length?Math.max(...s.mfu.ladder.map(r=>r.MFU||0)):NaN;
+  const inj=s.inject&&s.inject['poisoned, no clip'],injc=s.inject&&s.inject['poisoned, clip 1.0'];
+  const T=[['01','shapes',(s.shapes.act_MiB/s.shapes.state_MiB).toFixed(1)+'×','activations vs the 16 B/weight training state'],
+    ['02','gradient check','≥ '+s.gradcheck.min_digits.toFixed(1),'significant digits, backward() vs nudge, 10 layer types'],
+    ['03','accumulation',(s.accum.final_val.broken-s.accum.final_val.correct>=0?'+':'')+(s.accum.final_val.broken-s.accum.final_val.correct).toFixed(4),'val loss, broken − correct loop (same data)'],
+    ['04','grad norm',inj?'+'+(inj.react_step-s.inject.poison_step)+' step':'–','loss lag behind the norm after a poisoned batch'],
+    ['04','clipping',inj&&injc?(inj.peak_excess/Math.max(injc.peak_excess,1e-4)).toFixed(0)+'×':'–','less damage from the poisoned batch with clip 1.0'],
+    ['05','MFU',isNaN(bestM)?'–':(bestM*100).toFixed(1)+'%','best rung on '+(s.mfu?s.mfu.tag:'GPU')],
+    ['06','0.1 in E4M3','0x1D','= 0.1015625, 1.56% off; bf16 0x3DCD']];
+  $('tiles').innerHTML=T.map(t=>`<div class="tile"><div class="n">${t[0]} · ${t[1]}</div><div class="v">${t[2]}</div><div class="l">${t[3]}</div></div>`).join('');
+  if(s.accum&&s.accum.sweep){$('acc-tab').innerHTML='<tr><th>short micro-batch</th><th style="text-align:right">its token share</th><th style="text-align:right">its vote</th><th style="text-align:right">logged-loss error</th><th style="text-align:right">grad cosine</th></tr>'+
+    s.accum.sweep.map(r=>`<tr><td class="num" style="text-align:left">${r.short_len} tokens</td><td class="num">${(r.token_share*100).toFixed(1)}%</td><td class="num">${(r.vote*100).toFixed(0)}%</td><td class="num ${Math.abs(r.loss_err_pct)>.05?'bad':'good'}">${r.loss_err_pct>=0?'+':''}${r.loss_err_pct.toFixed(2)}%</td><td class="num">${r.grad_cos.toFixed(5)}</td></tr>`).join('');}
+}
+let nZoom=null;
+function normChart(){const m=D.main;if(!m){$('normchart').innerHTML='<div class="loading">main_run.json not found</div>';return;}
+  const x=m.gnorm.map((_,i)=>i);const el=$('normchart');el.innerHTML='<div id="nc1" class="chart"></div><div id="nc2" class="chart"></div><div class="tip" id="ntip"></div>';
+  const c1=lineChart($('nc1'),{series:[{x,y:m.gnorm,c:css('--violet'),w:1.1}],H:230,ylog:true,ylab:'grad norm',hlines:[{y:1,c:css('--green')}],xrange:nZoom});
+  const c2=lineChart($('nc2'),{series:[{x,y:m.loss,c:css('--orange'),w:.9,o:.4},{x,y:m.probe,c:css('--blue'),w:1.8}],H:230,ylab:'loss',xrange:nZoom});
+  const tip=$('ntip');let drag=null;
+  [c1,c2].forEach(c=>{
+    c.hit.addEventListener('mousemove',ev=>{const s=Math.round(c.toX(ev));if(s<0||s>=x.length)return;[c1,c2].forEach(k=>{k.cx.setAttribute('x1',k.X(s));k.cx.setAttribute('x2',k.X(s));k.cx.setAttribute('opacity',.5);});
+      tip.innerHTML=`step <b>${s}</b><br>grad norm <b>${m.gnorm[s].toFixed(3)}</b><br>probe loss <b>${m.probe[s].toFixed(4)}</b><br>batch loss ${m.loss[s].toFixed(4)}<br>lr ${m.lr[s].toExponential(2)}`;
+      const r=el.getBoundingClientRect();let lx=ev.clientX-r.left+14;if(lx>r.width-170)lx-=190;tip.style.left=lx+'px';tip.style.top=(ev.clientY-r.top-20)+'px';tip.style.opacity=1;
+      if(drag!=null){const a=Math.min(drag,s),b=Math.max(drag,s);c.sel.setAttribute('x',c.X(a));c.sel.setAttribute('width',c.X(b)-c.X(a));c.sel.setAttribute('opacity',.12);}});
+    c.hit.addEventListener('mouseleave',()=>{tip.style.opacity=0;[c1,c2].forEach(k=>k.cx.setAttribute('opacity',0));});
+    c.hit.addEventListener('mousedown',ev=>{drag=Math.round(c.toX(ev));});
+    c.hit.addEventListener('mouseup',ev=>{const s=Math.round(c.toX(ev));if(drag!=null&&Math.abs(s-drag)>5){nZoom=[Math.max(0,Math.min(drag,s)),Math.min(x.length-1,Math.max(drag,s))];drag=null;normChart();}drag=null;});
+    c.hit.addEventListener('dblclick',()=>{nZoom=null;normChart();});});
+  const s=D.summary;if(s&&s.norm){const n=s.norm;$('norm-say').innerHTML=`${(n.clipped_frac*100).toFixed(1)}% of steps were clipped. `+
+    (n.n_spikes?`Averaged over <b>${n.n_spikes}</b> natural grad-norm spikes, the extra probe loss peaks <b>${n.sta_peak_k} step(s) after</b> the spike. `:'')+
+    (n.events&&n.events.length?`The strongest single event: norm at step ${n.events[0].norm_step}, loss at step ${n.events[0].loss_step}.`:'');}
+}
+let mfuTag=null;
+function mfuChart(){const M=D.mfu;const tags=Object.keys(M||{});if(!tags.length){$('mfuchart').innerHTML='<div class="loading">no MFU data</div>';return;}
+  mfuTag=mfuTag||tags[0];$('mfu-gpu').innerHTML=tags.map(t=>`<button class="${t===mfuTag?'on':''}" data-t="${t}">${t} · peak ${M[t].peak16} TFLOP/s</button>`).join('');
+  $('mfu-gpu').onclick=e=>{const b=e.target.closest('button');if(b){mfuTag=b.dataset.t;mfuChart();}};
+  const L=M[mfuTag].ladder,W=1000,rowH=40,H=L.length*rowH+40,lab=270,maxV=Math.max(45,...L.map(r=>r.MFU_attn*100))*1.15;
+  const X=v=>lab+v/maxV*(W-lab-150);let g='';const blue=css('--blue'),soft=css('--blue-soft'),ink2=css('--ink-2');
+  g+=`<line x1="${X(40)}" x2="${X(40)}" y1="0" y2="${H-26}" stroke="${css('--green')}" stroke-width="1.3"/><text x="${X(40)+4}" y="12" font-size="11" fill="${css('--green')}">40% target</text>`;
+  L.forEach((r,i)=>{const y=20+i*rowH;g+=`<text x="${lab-10}" y="${y+18}" text-anchor="end" font-size="12.5" fill="${ink2}">${r.rung}</text>
+    <rect x="${lab}" y="${y+4}" width="${X(r.MFU*100)-lab}" height="22" rx="4" fill="${blue}"><title>${r.rung}: ${(r.MFU*100).toFixed(2)}%</title></rect>
+    <rect x="${X(r.MFU*100)+2}" y="${y+4}" width="${Math.max(0,X(r.MFU_attn*100)-X(r.MFU*100)-2)}" height="22" rx="4" fill="${soft}"/>
+    <text x="${X(r.MFU_attn*100)+8}" y="${y+19}" font-size="12" font-family="JetBrains Mono" fill="${ink2}">${(r.MFU*100).toFixed(1)}% · ${Math.round(r.tok_s/1e3).toLocaleString()}k tok/s</text>`;});
+  $('mfuchart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="MFU ladder">${g}</svg><div class="legend"><span><i style="background:var(--blue)"></i>MFU (6N)</span><span><i style="background:var(--blue-soft)"></i>+ attention FLOPs</span></div>`;
+  const s=D.summary;$('mfu-diag').innerHTML=(s&&s.mfu_diagnosis&&mfuTag===(s.mfu&&s.mfu.tag)?s.mfu_diagnosis:[]).map(d=>'<li>'+d.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`(.+?)`/g,'<code>$1</code>')+'</li>').join('');
+}
+function mcalc(){const N=+$('mN').value*1e6,T=+$('mT').value,G=+$('mG').value,P=+$('mP').value*1e12;const a=6*N*T,p=G*P,m=a/p;
+  $('mcalc').innerHTML=`achieved  6 × ${fmtN(N/1e6,1)}M × ${fmtN(T,0)} tok/s = <b>${fmtN(a/1e12,2)} TFLOP/s</b>\npeak      ${G} × ${fmtN(P/1e12,0)} TFLOP/s          = <b>${fmtN(p/1e12,0)} TFLOP/s</b>\nMFU       = <b class="${m>=.35?'good':'bad'}">${(m*100).toFixed(2)}%</b>${m>1?'   (above 100% is impossible: check N or tokens/s)':''}`;}
+['mN','mT','mG','mP'].forEach(id=>$(id).addEventListener('input',mcalc));mcalc();
+
+const FIGS=[['02_eps_sweep','Each precision has its own best nudge'],['03_how_it_hid','How the accumulation bug hid'],['03_accumulation_curves','Broken vs correct accumulation'],
+  ['04_gradnorm_vs_loss','Grad norm and probe loss, every step'],['04_spike_triggered','Loss after a grad-norm spike, averaged'],['04_layer_heatmap_and_clip','Per-layer norms and a data-driven clip'],
+  ['04_poisoned_batch','A poisoned batch, with and without clipping'],['05_mfu_T4','MFU ladder, profiler, width sweep (T4)'],['05_mfu_A100','MFU ladder (A100)'],['05_mfu_cross_gpu','Same code, two GPUs'],
+  ['06_bits_of_0.1','0.1 bit by bit'],['06_number_line','The number line around 0.1'],['06_swamping','Update swamping'],['06_fp16_underflow','Real gradients vs the fp16 floor'],['06_loss_scale','GradScaler during the run']];
+$('gallery').innerHTML=FIGS.map(([f,c])=>`<figure class="fig" data-f="${f}"><a href="figures/${f}.png" target="_blank"><img loading="lazy" src="figures/${f}.png" alt="${c}" onerror="this.closest('figure').remove()"></a><figcaption>${c}</figcaption></figure>`).join('');
+
+function redrawAll(){swamp();if(D.summary)tiles();normChart();mfuChart();}
+(async()=>{
+  const[s,m]=await Promise.all([getJSON('data/summary.json'),getJSON('data/main_run.json')]);D.summary=s;D.main=m;D.mfu={};
+  for(const t of['T4','A100','L4','H100']){const j=await getJSON(`data/mfu_${t}.json`);if(j&&j.peak16)D.mfu[t]=j;}
+  tiles();redrawAll();
+})();
+swamp();
+})();
+</script>
+</body>
+</html>

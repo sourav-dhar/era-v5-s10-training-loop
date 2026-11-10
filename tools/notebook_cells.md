@@ -416,9 +416,10 @@ for label, dt in [('fp64', torch.float64), ('fp32', torch.float32), ('bf16', tor
 
 fig, ax = plt.subplots(figsize=(8.6, 4.4))
 for (label, errs), c in zip(sweep.items(), [PAL['blue'], PAL['aqua'], PAL['orange']]):
-    ax.loglog(hs_, np.clip(errs, 1e-14, 1e3), color=c, label=label, marker='o', ms=3.5)
-    j = np.nanargmin(errs); ax.annotate(f'{label}: best h ≈ {hs_[j]:.0e}\n{-np.log10(errs[j]):.1f} digits', (hs_[j], errs[j]),
-                                       xytext=(8, -26 if label != 'bf16' else 12), textcoords='offset points', fontsize=8, color=INK2)
+    j = np.nanargmin(errs)
+    ax.loglog(hs_, np.clip(errs, 1e-14, 1e3), color=c, marker='o', ms=3.5,
+              label=f'{label}: best h ≈ {hs_[j]:.0e} → {-np.log10(errs[j]):.1f} digits')
+    ax.plot([hs_[j]], [errs[j]], 'o', ms=13, mfc='none', mec=c, mew=1.8)          # ring the minimum
 ax.set_xlabel('nudge size h'); ax.set_ylabel('relative error vs float64 backward()')
 ax.legend(loc='upper right'); ax.invert_xaxis()
 title(ax, 'Each precision has its own best nudge', f'{name}{list(idx)}: central difference vs backward(). Right of the minimum: rounding wins. Left: curvature wins.')
@@ -583,7 +584,7 @@ w = max(1, T // 32); dpos = d[:len(d) // w * w].reshape(-1, w).mean(1); xpos = n
 ax.bar(xpos, dpos, width=w * 0.85, color=[PAL['blue'] if v < 0 else PAL['red'] for v in dpos])
 ax.axhline(0, color=MUTED, lw=0.8)
 ax.set_xlabel('position in the sequence (context length)'); ax.set_ylabel('val loss: broken − correct')
-title(ax, 'Who the bug favoured', 'val loss gap by position; blue = broken is better there')
+title(ax, 'Who paid for the bug', f'broken − correct val loss by position (>0: broken worse) · first 16: {d[:16].mean():+.3f} · last half: {d[T // 2:].mean():+.3f}')
 fig.tight_layout(); save(fig, '03_accumulation_curves')
 RESULTS['accum']['report_gap'] = float(gap)
 RESULTS['accum']['per_pos_delta_early'] = float(d[:max(1, T // 16)].mean()); RESULTS['accum']['per_pos_delta_late'] = float(d[T // 2:].mean())
@@ -677,34 +678,53 @@ ev, Zg, Zl = lead_events(L_['gnorm'], L_['probe'])
 if len(ev):
     display(ev.style.format({'norm_z': '{:.1f}', 'loss_z': '{:.1f}'}).hide(axis='index'))
     best = ev.sort_values('norm_z', ascending=False).iloc[0]
-    print(f'Strongest natural event: grad norm jumped at step {int(best.norm_step)} (z={best.norm_z:.1f}); '
-          f'the probe loss only reacted at step {int(best.loss_step)}, {int(best.lead)} step(s) later.')
+    print(f'Strongest candidate: grad norm jumped at step {int(best.norm_step)} (z={best.norm_z:.1f}); '
+          f'the probe loss turned anomalous at step {int(best.loss_step)}, {int(best.lead)} step(s) later.'
+          + (' A gap that long, inside a trending stretch of the run, is weak evidence on its own; the spike-triggered average below is the real test.' if best.lead > 3 else ''))
 else:
     best = None; print('No natural lead event in this run — the controlled experiment below supplies one.')
 
-# Statistically, over the whole run: a spike-triggered average. Take every natural grad-norm spike (z > 3, first step of
-# each burst), look at how the probe loss moves from 5 steps before to 15 after, and subtract how it moves around an
-# ordinary step at the same point in training (so the downward trend cancels out).
+# Statistically, over the whole run: a spike-triggered average. Take every natural grad-norm spike (robust z > 3, first
+# step of each burst) and follow the probe loss from 5 steps before to 15 after, relative to its level just before
+# (mean of k = -5..-2). Subtract the same window around ordinary steps within +-100 steps (same phase, trends cancel).
 ks = np.arange(-5, 16); lo_s, hi_s = 2 * P['warmup'], S - ks[-1] - 1
 spikes = [i for i in range(lo_s, hi_s) if Zg[i] > 3 and not Zg[i - 1] > 3]
-win = lambda i: L_['probe'][i + ks] - L_['probe'][i]
-base_w = np.array([win(i) for i in range(lo_s, hi_s)]).mean(0)
-sta = np.array([win(i) for i in spikes]).mean(0) - base_w if spikes else None
-if sta is not None:
-    kpk = int(ks[np.argmax(sta)])
-    print(f'{len(spikes)} natural grad-norm spikes. Averaged over all of them, the extra probe loss peaks at k = {kpk:+d} '
-          f'step(s) after the spike (+{sta.max():.4f}); before the spike (k<0) it averages {sta[ks < 0].mean():+.4f}.')
+win = lambda i: L_['probe'][i + ks] - L_['probe'][i - 5:i - 1].mean()
+def local_excess(i):
+    nb = [j for j in range(max(lo_s, i - 100), min(hi_s, i + 100)) if abs(j - i) > 5 and not Zg[j] > 3]
+    return win(i) - np.mean([win(j) for j in nb], 0)
+sta = sem = None; kpk = None
+if len(spikes) >= 3:
+    E = np.array([local_excess(i) for i in spikes]); sta, sem = E.mean(0), E.std(0, ddof=1) / np.sqrt(len(E))
+    # The question is not "where is the maximum" (noisy over a 21-step window) but "is the loss ALREADY up at the spike step?"
+    z = sta / np.where(sem > 0, sem, np.inf); j0 = int(np.where(ks == 0)[0][0]); jpk = j0
+    lead = None if z[j0] > 2 else next((int(k) for k, zz in zip(ks, z) if k > 0 and zz > 2), None)
+    kpk = 0 if lead is None else lead; jpk = int(np.where(ks == kpk)[0][0])
+    mag = np.median([L_['gnorm'][i] / np.median(L_['gnorm'][i - 50:i]) for i in spikes])
+    print(f'{len(spikes)} natural grad-norm spikes (typically {mag:.2f}x the recent median). Probe loss vs nearby ordinary steps:')
+    print('  ' + '  '.join(f'k={k:+d}: {a:+.4f} (z={zz:+.1f})' for k, a, zz in zip(ks, sta, z) if -3 <= k <= 3))
+    if z[j0] > 2:
+        print(f'  → Already AT the spike step the probe loss is {sta[j0]:+.4f} ± {sem[j0]:.4f} above normal ({z[j0]:.1f} s.e.). No lead: probe and norm '
+              'at step k are measured on the same weights, so when the trouble is already in the weights both see it at the same moment. '
+              'Only trouble arriving with the DATA lets the norm move first (next experiment).')
+    elif lead is not None:
+        print(f'  → The loss is normal at the spike step and first rises significantly at k = +{lead}: here the norm led by {lead} step(s).')
+    else:
+        print('  → No significant loss response around natural spikes in this run.')
     fig, ax = plt.subplots(figsize=(9, 3.6))
-    ax.axvline(0, color=PAL['violet'], lw=1.2); ax.text(0, sta.max(), ' grad-norm spike', color=PAL['violet'], fontsize=8.5, va='top')
-    ax.axhline(0, color=MUTED, lw=0.8)
+    ax.axvline(0, color=PAL['violet'], lw=1.2); ax.axhline(0, color=MUTED, lw=0.8)
+    ax.fill_between(ks, sta - sem, sta + sem, color=PAL['blue'], alpha=0.15, lw=0)
     ax.plot(ks, sta, color=PAL['blue'], marker='o', ms=6)
-    ax.set_xlabel('steps relative to the grad-norm spike'); ax.set_ylabel('extra probe loss vs an ordinary step')
-    title(ax, 'What the loss does after a grad-norm spike', f'average over {len(spikes)} natural spikes in the main run; probe measured before each update')
+    ax.annotate(f'k={kpk:+d}: {sta[jpk]:+.4f} ± {sem[jpk]:.4f}', (kpk, sta[jpk]), xytext=(14, 4), textcoords='offset points', fontsize=8.5, color=INK2)
+    ax.text(0, ax.get_ylim()[1], ' grad-norm spike', color=PAL['violet'], fontsize=8.5, va='top')
+    ax.set_xlabel('steps relative to the grad-norm spike'); ax.set_ylabel('extra probe loss vs nearby ordinary steps')
+    title(ax, 'What the loss does around a natural grad-norm spike', f'mean ± 1 s.e. over {len(spikes)} spikes, vs nearby ordinary steps · at step k, probe and norm see the same weights')
     save(fig, '04_spike_triggered')
 else:
-    kpk = None; print('No natural grad-norm spikes (z > 3) after warmup.')
-RESULTS['norm'] = dict(events=ev.to_dict('records'), n_spikes=len(spikes), sta_peak_k=kpk, sta_peak=float(sta.max()) if sta is not None else None,
-                       sta=dict(k=ks.tolist(), excess=sta.tolist()) if sta is not None else None,
+    print('Fewer than 3 natural grad-norm spikes after warmup; skipping the spike-triggered average.')
+RESULTS['norm'] = dict(events=ev.to_dict('records'), n_spikes=len(spikes), sta_peak_k=kpk,
+                       sta_peak=float(sta[jpk]) if sta is not None else None, sta_peak_sem=float(sem[jpk]) if sta is not None else None,
+                       sta=dict(k=ks.tolist(), excess=sta.tolist(), sem=sem.tolist()) if sta is not None else None,
                        final_val=float(eval_val(model)), clipped_frac=float(np.mean(L_['gnorm'] > CLIP)),
                        median_tok_s=float(np.median(L_['tok_s'][10:])))
 
@@ -714,19 +734,22 @@ fig, axes = plt.subplots(2, 1, figsize=(13, 6.6), sharex=True, gridspec_kw=dict(
 ax = axes[0]
 ax.plot(st, L_['gnorm'], color=PAL['violet'], lw=0.9, alpha=0.45)
 ax.plot(st, ema(L_['gnorm'], 0.95), color=PAL['violet'], lw=2, label='grad norm (pre-clip)')
-ax.axhline(CLIP, color=PAL['green'], lw=1.2); ax.text(S, CLIP, ' clip 1.0', color=PAL['green'], fontsize=8.5, va='center')
+ax.axhline(CLIP, color=PAL['green'], lw=1.2); ax.text(S * 0.003, CLIP * 1.04, 'clip 1.0', color=PAL['green'], fontsize=8.5, va='bottom')
 ax.set_yscale('log'); ax.set_ylabel('grad norm (log)')
 title(ax, 'Grad norm and probe loss, every step', f'{S:,} steps · {np.mean(L_["gnorm"] > CLIP):.1%} of steps clipped · probe = fixed validation batch, measured before each update')
 ax = axes[1]
 ax.plot(st, L_['loss'], color=PAL['orange'], lw=0.8, alpha=0.35, label='training loss (this batch)')
 ax.plot(st, L_['probe'], color=PAL['blue'], lw=1.8, label='probe loss')
 ax.set_ylabel('loss'); ax.set_xlabel('step'); ax.legend(loc='upper right')
-if best is not None:
-    for a in axes:
-        a.axvline(best.norm_step, color=PAL['violet'], lw=1); a.axvline(best.loss_step, color=PAL['blue'], lw=1)
-    axes[0].annotate(f'norm moves (step {int(best.norm_step)})', (best.norm_step, L_['gnorm'][int(best.norm_step)]), xytext=(10, 10), textcoords='offset points', fontsize=8.5, color=INK2)
-    axes[1].annotate(f'loss reacts (step {int(best.loss_step)})', (best.loss_step, L_['probe'][int(best.loss_step)]), xytext=(10, 18), textcoords='offset points', fontsize=8.5, color=INK2)
+bstep = int(np.argmin(ema(L_['probe'], 0.9)))
+for a in axes: a.axvspan(bstep, S, color=PAL['red'], alpha=0.05, lw=0)
+axes[1].annotate(f'best checkpoint ≈ step {bstep} (probe {L_["probe"][bstep]:.3f})\nfrom here the model memorises: train loss keeps falling, probe climbs to {L_["probe"][-1]:.3f}',
+                 (bstep, L_['probe'][bstep]), xytext=(0, 62), textcoords='offset points', fontsize=8.5, color=INK2, ha='center', arrowprops=dict(arrowstyle='-', color=MUTED))
+RESULTS['norm'].update(best_step=bstep, best_probe=float(L_['probe'][bstep]), final_probe=float(L_['probe'][-1]), final_train=float(np.mean(L_['loss'][-20:])))
 save(fig, '04_gradnorm_vs_loss')
+
+%%md
+**A silent failure nobody planted.** Read the bottom panel again. The training loss falls all the way to the last step, and a dashboard showing only that curve would call this run a success. The probe loss, measured on text the model never trains on, bottoms out about halfway (the shaded region starts there) and then climbs: the 10.8M-parameter model has started memorising 1M characters of Shakespeare instead of learning to write it. The grad norm rises with it, because fitting individual sequences produces larger, less consistent gradients. Nothing crashed, nothing warned. This is why the probe exists, and why the "best checkpoint" is chosen on held-out loss, never on training loss. (nanoGPT's Shakespeare recipe uses dropout 0.2 for exactly this reason; I keep dropout at 0 throughout so the gradient checks stay exact.)
 
 %%code [core,norm]
 fig, axes = plt.subplots(1, 2, figsize=(14, 4.6), gridspec_kw=dict(width_ratios=[1.6, 1]))
@@ -742,9 +765,9 @@ ax = axes[1]
 post = L_['gnorm'][P['warmup']:]
 qs = {q: np.quantile(post, q) for q in [0.5, 0.9, 0.99]}
 ax.hist(np.log10(post), bins=60, color=PAL['violet'], alpha=0.85, edgecolor=SURF, linewidth=0.6)
-for (q, v), c in zip(qs.items(), [MUTED, PAL['yellow'], PAL['red']]):
-    ax.axvline(np.log10(v), color=c, lw=1.4); ax.text(np.log10(v), ax.get_ylim()[1] * 0.92, f' p{int(q * 100)}={v:.2f}', color=INK2, fontsize=8)
-ax.axvline(0, color=PAL['green'], lw=1.4); ax.set_xlabel('log10 grad norm (after warmup)'); ax.set_ylabel('steps')
+for j, ((q, v), c) in enumerate(zip(qs.items(), [MUTED, PAL['yellow'], PAL['red']])):
+    ax.axvline(np.log10(v), color=c, lw=1.4); ax.text(np.log10(v), ax.get_ylim()[1] * (0.95 - 0.09 * j), f' p{int(q * 100)}={v:.2f}', color=INK2, fontsize=8)
+ax.axvline(0, color=PAL['green'], lw=1.4); ax.text(0, ax.get_ylim()[1] * 0.62, ' clip 1.0', color=PAL['green'], fontsize=8); ax.set_xlabel('log10 grad norm (after warmup)'); ax.set_ylabel('steps')
 title(ax, 'Choosing the clip from data', 'the threshold should sit just above normal life (≈p99), not at habit')
 fig.tight_layout(); save(fig, '04_layer_heatmap_and_clip')
 RESULTS['norm']['quantiles'] = {f'p{int(q * 100)}': float(v) for q, v in qs.items()}
@@ -801,6 +824,9 @@ if r is not None:
     axes[1].annotate(f'loss reacts at +{r - a}', (r, inj['poisoned, no clip']['probe'][r]), xytext=(14, 10), textcoords='offset points', fontsize=8.5, color=INK2, arrowprops=dict(arrowstyle='-', color=MUTED))
 title(axes[0], 'A poisoned batch: the norm screams first', f'{I["n"]} noise batches at step +{a} (shaded). The norm jumps on the step itself; the loss can only respond after the update lands.')
 save(fig, '04_poisoned_batch')
+
+%%md
+**Two regimes, one rule.** The poisoned batch is the clean case the lesson describes: the grad norm is computed from the batch *before* the update, so it reports the bad data on the step it arrives, and the loss can only respond once that update has landed, one step later. The natural spikes above behave differently: the probe loss and the norm peak *together*, because both are measured on the same weights and the cause (a slightly bad previous update) is already in them. So the norm moves *first* when trouble enters through the data, and *with* the loss when it is already in the weights. Either way it is never later than the loss, and it is far louder: the poisoned step multiplied the norm by more than an order of magnitude on the step itself, before any damage existed to measure. That is why it belongs on the dashboard, and why the clip, which acts on exactly that signal, held the damage to a small fraction of what the unclipped run took.
 
 %%md
 <a id="5"></a>
@@ -889,14 +915,15 @@ if PEAK16: gemm['of_peak'] = gemm.TFLOPs / PEAK16
 display(gemm.style.format({'TFLOPs': '{:.1f}', 'of_peak': '{:.0%}'}).hide(axis='index'))
 
 %%md
-**Where does a step's time actually go?** The PyTorch profiler on the best *eager* rung (compiled graphs fuse kernels and hide the breakdown). Every GPU kernel is sorted into a bucket; whatever is left of the wall-clock step is time the GPU sat idle waiting for Python to launch the next kernel.
+**Where does a step's time actually go?** The PyTorch profiler on the best *eager* rung (compiled graphs fuse kernels and hide the breakdown). Every GPU kernel is sorted into a bucket. The step's wall time is measured separately, *without* the profiler attached (profiling slows the Python side several-fold); whatever the kernels don't cover is time the GPU sat idle waiting for Python to launch the next kernel.
 
 %%code [core,mfu]
 from torch.profiler import profile, ProfilerActivity
-BUCKETS = [('matmul', r'gemm|cutlass|xmma|cublas|sm\d+_|ampere_|turing_|volta_|hopper|wgmma|gemv|addmm|mm_'),
-           ('attention', r'flash|fmha|attention|efficient'), ('optimizer', r'adam|multi_tensor|foreach|fused_'),
+BUCKETS = [('attention', r'flash|fmha|attention|efficient'),
+           ('matmul', r'gemm|cutlass|xmma|cublas|sm\d+_|ampere_|turing_|volta_|hopper|wgmma|gemv|addmm|mm_'),
+           ('optimizer', r'adam|multi_tensor|foreach|fused_'),
            ('layernorm · gelu · softmax', r'layer_norm|layernorm|gelu|softmax|norm'),
-           ('loss', r'cross_entropy|nll|log_softmax'), ('memcpy', r'memcpy|memset|copy'),
+           ('loss', r'cross_entropy|nll|log_softmax'), ('dtype casts & copies', r'memcpy|memset|copy'),
            ('elementwise · reductions', r'elementwise|vectorized|reduce|unrolled|index|embedding|cat|fill|where|mul|add')]
 def bucket(name):
     return next((b for b, rx in BUCKETS if re.search(rx, name, re.I)), 'other kernels')
@@ -904,12 +931,18 @@ def bucket(name):
 prof_rows, idle_frac = [], float('nan')
 if device == 'cuda':
     m = GPT(replace(CFG, attn='sdpa')).to(device); o = make_opt(m, fused=True); sc = make_scaler(); x, y = get_batch('train', B0, T)
-    for _ in range(5): train_step(m, o, sc, x, y, 1.0)
-    n_prof = 5; sync(); t0 = time.perf_counter()
+    def _step():                                             # self-contained: this section must run on its own
+        with amp_ctx(): loss = token_loss(m(x), y)
+        sc.scale(loss).backward(); sc.unscale_(o); torch.nn.utils.clip_grad_norm_(m.parameters(), 1.0)
+        sc.step(o); sc.update(); o.zero_grad(set_to_none=True)
+    for _ in range(5): _step()
+    sync(); t0 = time.perf_counter()                         # wall time WITHOUT the profiler: profiling slows the
+    for _ in range(20): _step()      # Python side ~4x and would fake a huge idle share
+    sync(); wall_ms = (time.perf_counter() - t0) * 1e3 / 20
+    n_prof = 5
     with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
-        for _ in range(n_prof): train_step(m, o, sc, x, y, 1.0)
+        for _ in range(n_prof): _step()
         sync()
-    wall_ms = (time.perf_counter() - t0) * 1e3 / n_prof
     for e in prof.key_averages():
         t_us = getattr(e, 'self_device_time_total', None)
         t_us = t_us if t_us is not None else getattr(e, 'self_cuda_time_total', 0)
@@ -957,7 +990,7 @@ if PEAK16 and len(lad):
     ax.set_yticks(yv); ax.set_yticklabels(lad.rung, fontsize=8.5); ax.grid(axis='y', visible=False)
     ax.axvline(40, color=PAL['green'], lw=1.2); ax.text(40, yv.max() + 0.55, ' 40% target', color=PAL['green'], fontsize=8.5)
     ax.set_xlim(0, max(45, 100 * lad.MFU_attn.max() * 1.45)); ax.set_xlabel(f'% of {GPU_TAG} dense {amp_name} tensor peak ({PEAK16:.0f} TFLOP/s)')
-    ax.legend(loc='lower right')
+    ax.legend(loc='upper left', bbox_to_anchor=(0, -0.14), ncol=2)
 title(ax, f'The MFU ladder on a {GPU_TAG}', 'each rung adds one change to the one above')
 ax = axes[1]
 if len(by_all):
@@ -975,7 +1008,7 @@ if len(wid) and PEAK16:
     ax.plot(wid.n_embd, 100 * wid.MFU, color=PAL['blue'], marker='o', ms=7, label='MFU (6N)')
     ax.plot(wid.n_embd, 100 * wid.MFU_attn, color='#9ec5f4', marker='o', ms=6, label='MFU (6N + attention)')
     for _, r in wid.iterrows(): ax.text(r.n_embd, 100 * r.MFU - 2.2, f'{r.params_M:.0f}M', ha='center', fontsize=7.8, color=INK2)
-    ax.axhline(40, color=PAL['green'], lw=1.2); ax.set_xscale('log', base=2); ax.set_xticks(wid.n_embd); ax.set_xticklabels(wid.n_embd)
+    ax.axhline(40, color=PAL['green'], lw=1.2); ax.set_ylim(0, 50); ax.set_xscale('log', base=2); ax.set_xticks(wid.n_embd); ax.set_xticklabels(wid.n_embd)
     ax.set_xlabel('model width n_embd (6 layers, eager)'); ax.set_ylabel('MFU %'); ax.legend(loc='upper left'); ax.set_ylim(bottom=0)
 title(ax, 'Wider models fill the machine', 'same code, bigger matmuls')
 fig.tight_layout(); save(fig, f'05_mfu_{GPU_TAG}')
@@ -991,17 +1024,19 @@ if PEAK16 and len(lad):
     diag.append(f'**Headline:** best rung `{best_r.rung}` reaches **{best_r.MFU:.1%} MFU** ({best_r.tflops_6N:.1f} TFLOP/s of {PEAK16:.0f}); '
                 f'counting attention FLOPs, {best_r.MFU_attn:.1%}. The fp32 starting point was {first.MFU:.1%} — a {best_r.tok_s / first.tok_s:.1f}× speed-up with the same maths.')
     diag.append(f'**The ceiling is not the datasheet.** A large square {amp_name} matmul — the best case — sustains {ceil_:.1f} TFLOP/s = **{ceil_ / PEAK16:.0%} of peak**. '
-                f'{"A T4 is a 70 W card: under sustained load it drops well below its boost clock, so a real ~40% target means ~" + format(0.4 * PEAK16 / ceil_, ".0%") + " of what this card can actually sustain." if GPU_TAG == "T4" else "That gap is clock and power behaviour, not our code."}')
+                + (f'A T4 is a 70 W card that cannot hold its boost clock under sustained load, so 40% of the datasheet is **{0.4 * PEAK16 / ceil_:.0%} of what this card sustains even on a perfect matmul**: the target sits at or above what the hardware can actually deliver. ' if GPU_TAG == 'T4' else '')
+                + f'Measured against that practical ceiling, the best rung is at **{best_r.tflops_6N / ceil_:.0%}**.')
     mshape = gemm.iloc[2:6]
     diag.append(f'**Our matmuls are too small to fill it.** At this model\'s shapes (C={CFG.n_embd}) the same matmuls run at '
                 f'{mshape.TFLOPs.min():.1f}–{mshape.TFLOPs.max():.1f} TFLOP/s ({mshape.of_peak.min():.0%}–{mshape.of_peak.max():.0%} of peak): too few columns per tile to keep the tensor cores fed.')
     if len(by_all):
         mm = by_all.get('matmul', 0) / by_all.sum()
         diag.append(f'**Most of a step is not matmul.** The profiler puts matmuls at **{mm:.0%}** of the step; LayerNorm, GELU, softmax, the loss, the optimizer and plain elementwise kernels are memory-bound — they move bytes, not FLOPs — '
-                    f'and the GPU idles {idle_frac:.0%} of the wall clock waiting on Python to launch ~hundreds of small kernels.')
+                    + (f'and the GPU sits idle {idle_frac:.0%} of the wall clock waiting on Python to launch the next of hundreds of small kernels.' if idle_frac >= 0.08 else
+                       f'and the GPU is busy {1 - idle_frac:.0%} of the wall clock, so launch overhead is not the problem here: the kernels themselves are.'))
     if len(wid) > 1:
         diag.append(f'**Size fixes a lot of it.** With identical code, MFU goes from {wid.MFU.iloc[0]:.1%} at n_embd={wid.n_embd.iloc[0]} to {wid.MFU.iloc[-1]:.1%} at n_embd={wid.n_embd.iloc[-1]}. '
-                    f'The distance to 40% is mostly the price of a 10M-parameter model, then the GPU class, then launch overhead.')
+                    f'The distance to 40% is mostly the price of a 10M-parameter model, then the GPU class.')
     if GPU_TAG == 'T4':
         diag.append('**The GPU generation.** Turing has no bf16 tensor cores (so we pay for fp16 + loss scaling), and FlashAttention-2 needs Ampere; SDPA falls back to the memory-efficient kernel.')
     diag.append('**Not counted in 6N at all:** the optimizer step, clipping, the probe/eval passes, and recomputation. MFU is deliberately strict — "useful model FLOPs" only.')
@@ -1023,7 +1058,8 @@ if len(others) >= 2:
         ax.bar(xs, vals, width=w * 0.9, color=c, label=f"{tg} ({others[tg]['amp']}, peak {others[tg]['peak16']:.0f} TFLOP/s)")
         for xx, v in zip(xs, vals): ax.text(xx, v + 0.4, f'{v:.1f}', ha='center', fontsize=7.8, color=INK2)
     ax.set_xticks(np.arange(len(rungs))); ax.set_xticklabels([r.replace(' · ', '\n') for r in rungs], fontsize=8)
-    ax.axhline(40, color=PAL['green'], lw=1.2); ax.set_ylabel('MFU %'); ax.legend(loc='upper left'); ax.grid(axis='x', visible=False)
+    ax.axhline(40, color=PAL['green'], lw=1.2); ax.text(-0.45, 40.6, '40% target', color=PAL['green'], fontsize=8.5)
+    ax.set_ylim(0, 50); ax.set_ylabel('MFU %'); ax.legend(loc='upper left', bbox_to_anchor=(0.12, 1.0)); ax.grid(axis='x', visible=False)
     title(ax, 'Same code, two machines', 'MFU against each GPU\'s own dense tensor-core peak')
     save(fig, '05_mfu_cross_gpu')
     RESULTS['mfu_cross'] = {tg: [dict(rung=r['rung'], MFU=r['MFU'], tok_s=r['tok_s']) for r in d['ladder']] for tg, d in others.items()}
@@ -1183,19 +1219,25 @@ sums = {f: [0.0] for f in ['fp32', 'fp16', 'bf16', 'fp8 E4M3']}; acc = {f: Fract
 for _ in range(2000):
     for f in sums: acc[f] = q(acc[f] + Fraction(1, 10), f); sums[f].append(float(acc[f]))
 
+sr_final = []                                             # stochastic rounding is right on AVERAGE: repeat it
+for _ in range(20):
+    wv = Fraction(1)
+    for _ in range(n_upd): wv = q_sr(wv + Fraction(du), 'bf16')
+    sr_final.append(float(wv))
 fig, axes = plt.subplots(1, 2, figsize=(14, 4.4))
 ax = axes[0]
 for (k, v), c in zip(traj.items(), [PAL['aqua'], PAL['red'], PAL['blue'], PAL['orange']]):
-    ax.plot(v, color=c, label=f'{k} → {v[-1]:.4f}', lw=2 if 'stochastic' not in k else 1.4)
+    lab = f'{k} → {v[-1]:.4f}' + (f'  (20 runs: {np.mean(sr_final):.3f} ± {np.std(sr_final):.3f})' if 'stochastic' in k else '')
+    ax.plot(v, color=c, label=lab, lw=2 if 'stochastic' not in k else 1.4)
 ax.axhline(2.0, color=MUTED, lw=0.8); ax.set_xlabel('update number'); ax.set_ylabel('weight'); ax.legend(loc='upper left')
 title(ax, 'A weight that should reach 2.0', '1,000 updates of +0.001 each')
 ax = axes[1]
 for (f, v), c in zip(sums.items(), [PAL['aqua'], PAL['violet'], PAL['blue'], PAL['orange']]):
-    ax.plot(v, color=c, label=f'{f}: stalls at {v[-1]:g}' if v[-1] < 199 else f'{f}: {v[-1]:.2f}')
+    ax.plot(v, color=c, label=f'{f}: stalls at {v[-1]:g}' if v[-1] < 199 else (f'{f}: overshoots to {v[-1]:.2f} (each add rounds UP)' if v[-1] > 200.5 else f'{f}: {v[-1]:.4f}'))
 ax.plot([0, 2000], [0, 200], color=MUTED, lw=0.8); ax.set_xlabel('number of 0.1s added'); ax.set_ylabel('running sum'); ax.legend(loc='upper left')
-title(ax, 'Adding 0.1, two thousand times', 'each format stops growing once 0.1 is under half its spacing')
+title(ax, 'Adding 0.1, two thousand times', 'rounding error is not noise: it can stall a sum, or bias it in one direction')
 fig.tight_layout(); save(fig, '06_swamping')
-RESULTS['swamping'] = {k: v[-1] for k, v in traj.items()} | {f'sum_{k}': v[-1] for k, v in sums.items()}
+RESULTS['swamping'] = {k: v[-1] for k, v in traj.items()} | {f'sum_{k}': v[-1] for k, v in sums.items()} | {'sr_mean_20': float(np.mean(sr_final)), 'sr_std_20': float(np.std(sr_final))}
 
 %%md
 ### fp16 underflow and loss scaling — on this model's real gradients
@@ -1255,7 +1297,7 @@ lines = [f"**Model** {s['n_params'] / 1e6:.2f}M params · {s['gpu']} · {s['amp_
 if 'shapes' in s: lines.append(f"**1 · Shapes** training state {s['shapes']['state_MiB']:.0f} MiB (16 B/weight) vs activations {s['shapes']['act_MiB']:.0f} MiB — {s['shapes']['att_share']:.0%} of them attention matrices")
 if 'gradcheck' in s: lines.append(f"**2 · Gradients** backward() and the nudge agree to ≥ {s['gradcheck']['min_digits']:.1f} significant digits in all 10 layer types (fp64)")
 if 'accum' in s: lines.append(f"**3 · Accumulation** big batch vs correct loop: max |Δgrad| {s['accum']['big_vs_correct_maxdiff']:.1e}; broken loop logs a loss {s['accum']['report_gap']:+.3f} off the truth; final val {s['accum']['final_val']['correct']:.4f} (correct) vs {s['accum']['final_val']['broken']:.4f} (broken)")
-if 'inject' in s: lines.append(f"**4 · Grad norm** poisoned batch: norm {s['inject']['poisoned, no clip']['norm_at_poison']:.1f} on the step itself, loss reacts after the update; averaged over {s['norm']['n_spikes']} natural spikes, the loss excess peaks {s['norm']['sta_peak_k']} step(s) after the norm")
+if 'inject' in s: lines.append(f"**4 · Grad norm** poisoned batch: norm {s['inject']['poisoned, no clip']['norm_at_poison']:.1f} on the step itself, loss reacts after the update" + (f"; across {s['norm']['n_spikes']} natural spikes the loss is already up at k={s['norm']['sta_peak_k']:+d} ({s['norm']['sta_peak']:+.4f} ± {s['norm']['sta_peak_sem']:.4f})" if s['norm'].get('sta_peak') is not None else ''))
 if 'mfu' in s and s['mfu'].get('ladder'):
     b = max(s['mfu']['ladder'], key=lambda r: r.get('MFU', 0)); lines.append(f"**5 · MFU** best {b.get('MFU', float('nan')):.1%} on {s['mfu']['tag']} ({b['rung']})")
 if 'float' in s: lines.append('**6 · 0.1** fp32 `0x3DCCCCCD` · bf16 `0x3DCD` (0.098% off) · fp8 E4M3 `0x1D` (1.56% off) — all verified against hardware')

@@ -14,6 +14,7 @@ import modal
 
 ROOT = Path(__file__).resolve().parents[1]
 app = modal.App("era-v5-s10-training-loop")
+vol = modal.Volume.from_name("era-v5-s10-runs", create_if_missing=True)   # results survive a dropped local client
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("build-essential")                       # torch.compile / Triton needs a C compiler
@@ -24,7 +25,7 @@ image = (
 )
 
 
-def _execute(profile, tags, extra_files):
+def _execute(profile, tags, extra_files, save_as=None):
     import os
     os.chdir("/repo")
     for d in ("figures", "results"):
@@ -44,17 +45,22 @@ def _execute(profile, tags, extra_files):
         for p in ["figures", "results", out.name]:
             if Path(p).exists():
                 tar.add(p)
+    if save_as:   # fetch later with: modal volume get era-v5-s10-runs <save_as>
+        Path(f"/out/{save_as}").write_bytes(buf.getvalue())
+        if err:
+            Path(f"/out/{save_as}.err.txt").write_text(err)
+        vol.commit()
     return buf.getvalue(), err
 
 
-@app.function(image=image, gpu="T4", cpu=8.0, memory=16384, timeout=3 * 3600)
+@app.function(image=image, gpu="T4", cpu=8.0, memory=16384, timeout=3 * 3600, volumes={"/out": vol})
 def run_t4(extra_files: dict = None):
-    return _execute("full", None, extra_files)
+    return _execute("full", None, extra_files, save_as="t4.tar.gz")
 
 
-@app.function(image=image, gpu="A100", cpu=8.0, memory=16384, timeout=3600)
+@app.function(image=image, gpu="A100", cpu=8.0, memory=16384, timeout=3600, volumes={"/out": vol})
 def run_a100_mfu():
-    return _execute("mfu", ["core", "mfu"], None)
+    return _execute("mfu", ["core", "mfu"], None, save_as="a100.tar.gz")
 
 
 def _unpack(blob, dest: Path):

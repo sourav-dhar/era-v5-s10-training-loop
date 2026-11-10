@@ -19,7 +19,8 @@ def run(nb_in: Path, nb_out: Path, profile: str, tags=None, timeout=3600, cwd: P
     nb = nbf.read(nb_in, as_version=4)
     if tags:
         keep = set(tags)
-        nb.cells = [c for c in nb.cells if c.cell_type == "code" and keep & set(c.metadata.get("tags", []))]
+        # a cell runs only if every one of its tags was requested ([core,grad] is skipped by --tags core,mfu)
+        nb.cells = [c for c in nb.cells if c.cell_type == "code" and c.metadata.get("tags") and set(c.metadata["tags"]) <= keep]
     os.environ["S10_PROFILE"] = profile
     os.environ.setdefault("MPLBACKEND", "module://matplotlib_inline.backend_inline")
     t0 = time.time()
